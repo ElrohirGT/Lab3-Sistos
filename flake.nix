@@ -22,7 +22,7 @@
       pkgs = nixpkgsFor.${system};
     in {
       default = pkgs.mkShell {
-        packages = [pkgs.zig];
+        packages = [pkgs.zig pkgs.gf];
       };
     });
   };
