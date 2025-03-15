@@ -1,4 +1,5 @@
 #include <fcntl.h>
+#include <math.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -20,6 +21,68 @@ const bool TRUE = 1;
 const bool FALSE = 0;
 
 const uint16_t CHECKER = 0b111111111;
+
+size_t idx_fromCordsToIdx(size_t row_length, size_t rowIdx, size_t colIdx) {
+  return rowIdx * row_length + colIdx;
+}
+
+bool validate_columns(Sudoku *sudoku) {
+  for (size_t colIdx = 0; colIdx < sudoku->rowLength; colIdx++) {
+    uint16_t marker = 0;
+    for (size_t rowIdx = 0; rowIdx < sudoku->rowLength; rowIdx++) {
+      size_t idx = idx_fromCordsToIdx(sudoku->rowLength, rowIdx, colIdx);
+      uint8_t cell_val = sudoku->data[idx];
+      uint16_t marker_col = 1 << cell_val;
+      marker |= marker_col;
+    }
+
+    if (CHECKER != marker) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+bool validate_row(Sudoku *sudoku, size_t rowIdx) {
+  for (size_t rowIdx = 0; rowIdx < sudoku->rowLength; rowIdx++) {
+    uint16_t marker = 0;
+    for (size_t colIdx = 0; colIdx < sudoku->rowLength; colIdx++) {
+      size_t idx = idx_fromCordsToIdx(sudoku->rowLength, rowIdx, colIdx);
+      uint8_t cell_val = sudoku->data[idx];
+      uint16_t marker_col = 1 << cell_val;
+      marker |= marker_col;
+    }
+
+    if (CHECKER != marker) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+bool validate_submatrices(const Sudoku *sudoku) {
+  for (size_t start_row_col = 0; start_row_col < sudoku->rowLength;
+       start_row_col += 3) {
+    uint16_t marker = 0;
+
+    for (size_t colIdx = start_row_col; colIdx < start_row_col + 3; colIdx++) {
+      for (size_t rowIdx = start_row_col; rowIdx < start_row_col + 3;
+           rowIdx++) {
+
+        size_t idx = idx_fromCordsToIdx(sudoku->rowLength, rowIdx, colIdx);
+        uint8_t cell_val = sudoku->data[idx];
+        uint16_t marker_col = 1 << cell_val;
+        marker |= marker_col;
+      }
+    }
+
+    if (CHECKER != marker) {
+      return FALSE;
+    }
+  }
+
+  return TRUE;
+}
 
 int main(int argc, char **argv) {
   const size_t ROW_LENGTH = 9;
@@ -66,66 +129,21 @@ int main(int argc, char **argv) {
       .length = ROW_LENGTH * ROW_LENGTH,
       .data = sudoku_data,
   };
-}
 
-size_t idx_fromCordsToIdx(size_t row_length, size_t rowIdx, size_t colIdx) {
-  return rowIdx * row_length + colIdx;
-}
+  bool submatrices_are_valid = validate_submatrices(&sudoku);
 
-bool validate_columns(Sudoku *sudoku) {
-  for (size_t colIdx = 0; colIdx < sudoku->rowLength; colIdx++) {
-    uint16_t marker = 0;
-    for (size_t rowIdx = 0; rowIdx < sudoku->rowLength; rowIdx++) {
-      size_t idx = idx_fromCordsToIdx(sudoku->rowLength, rowIdx, colIdx);
-      uint8_t cell_val = sudoku->data[idx];
-      uint16_t marker_col = 1 << cell_val;
-      marker |= marker_col;
-    }
+  pid_t process_id = getpid();
+  switch (fork()) {
+  case -1:
+    fprintf(stderr, "An error has ocurred trying to fork!");
+    return 1;
+  case 0:
+    int pid_str_size = ceil(log10(process_id) + 1) * sizeof(char);
+    char str_pid[pid_str_size];
+    execlp("ps", "-p", process_id, "-lLF");
+    break;
 
-    if (CHECKER != marker) {
-      return FALSE;
-    }
+  default: // On the father...
+    break;
   }
-  return TRUE;
-}
-
-bool validate_row(Sudoku *sudoku, size_t rowIdx) {
-  for (size_t rowIdx = 0; rowIdx < sudoku->rowLength; rowIdx++) {
-    uint16_t marker = 0;
-    for (size_t colIdx = 0; colIdx < sudoku->rowLength; colIdx++) {
-      size_t idx = idx_fromCordsToIdx(sudoku->rowLength, rowIdx, colIdx);
-      uint8_t cell_val = sudoku->data[idx];
-      uint16_t marker_col = 1 << cell_val;
-      marker |= marker_col;
-    }
-
-    if (CHECKER != marker) {
-      return FALSE;
-    }
-  }
-  return TRUE;
-}
-
-bool validate_submatrix(Sudoku *sudoku, size_t topRowIdx, size_t topColIdx) {
-  for (size_t start_row_col = 0; start_row_col < sudoku->rowLength;
-       start_row_col += 3) {
-    uint16_t marker = 0;
-
-    for (size_t colIdx = start_row_col; colIdx < start_row_col + 3; colIdx++) {
-      for (size_t rowIdx = start_row_col; rowIdx < start_row_col + 3;
-           rowIdx++) {
-
-        size_t idx = idx_fromCordsToIdx(sudoku->rowLength, rowIdx, colIdx);
-        uint8_t cell_val = sudoku->data[idx];
-        uint16_t marker_col = 1 << cell_val;
-        marker |= marker_col;
-      }
-    }
-
-    if (CHECKER != marker) {
-      return FALSE;
-    }
-  }
-
-  return TRUE;
 }
