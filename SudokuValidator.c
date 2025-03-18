@@ -1,5 +1,6 @@
 #include <fcntl.h>
 #include <math.h>
+#include <omp.h>
 #include <pthread.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -31,7 +32,14 @@ size_t idx_fromCordsToIdx(size_t row_length, size_t rowIdx, size_t colIdx) {
 }
 
 bool validate_columns(Sudoku *sudoku) {
+  bool are_valid = TRUE;
+
+#pragma omp parallel for shared(are_valid)
   for (size_t colIdx = 0; colIdx < sudoku->rowLength; colIdx++) {
+    if (!are_valid) {
+      continue;
+    }
+
     uint16_t marker = 0;
     for (size_t rowIdx = 0; rowIdx < sudoku->rowLength; rowIdx++) {
       size_t idx = idx_fromCordsToIdx(sudoku->rowLength, rowIdx, colIdx);
@@ -41,14 +49,22 @@ bool validate_columns(Sudoku *sudoku) {
     }
 
     if (CHECKER != marker) {
-      return FALSE;
+      are_valid = FALSE;
+      continue;
     }
   }
-  return TRUE;
+
+  return are_valid;
 }
 
 bool validate_rows(Sudoku *sudoku) {
+  bool are_valid = TRUE;
+#pragma omp parallel for shared(are_valid)
   for (size_t rowIdx = 0; rowIdx < sudoku->rowLength; rowIdx++) {
+    if (!are_valid) {
+      continue;
+    }
+
     uint16_t marker = 0;
     for (size_t colIdx = 0; colIdx < sudoku->rowLength; colIdx++) {
       size_t idx = idx_fromCordsToIdx(sudoku->rowLength, rowIdx, colIdx);
@@ -58,15 +74,22 @@ bool validate_rows(Sudoku *sudoku) {
     }
 
     if (CHECKER != marker) {
-      return FALSE;
+      are_valid = FALSE;
+      continue;
     }
   }
-  return TRUE;
+
+  return are_valid;
 }
 
 bool validate_submatrices(const Sudoku *sudoku) {
+  bool are_valid = TRUE;
+#pragma omp parallel for shared(are_valid)
   for (size_t start_row_col = 0; start_row_col < sudoku->rowLength;
        start_row_col += 3) {
+    if (!are_valid) {
+      continue;
+    }
     uint16_t marker = 0;
 
     for (size_t rowIdx = start_row_col; rowIdx < start_row_col + 3; rowIdx++) {
@@ -81,11 +104,12 @@ bool validate_submatrices(const Sudoku *sudoku) {
     }
 
     if (CHECKER != marker) {
-      return FALSE;
+      are_valid = FALSE;
+      continue;
     }
   }
 
-  return TRUE;
+  return are_valid;
 }
 
 void *thread_column_checker(void *arg) {
