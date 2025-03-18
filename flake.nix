@@ -22,7 +22,7 @@
       pkgs = nixpkgsFor.${system};
     in {
       default = pkgs.mkShell {
-        packages = [pkgs.zig pkgs.gf];
+        packages = [pkgs.zig pkgs.gf pkgs.clang pkgs.llvmPackages.openmp];
       };
     });
   };
