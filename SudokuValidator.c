@@ -32,6 +32,8 @@ size_t idx_fromCordsToIdx(size_t row_length, size_t rowIdx, size_t colIdx) {
 }
 
 bool validate_columns(Sudoku *sudoku) {
+  omp_set_num_threads(9);
+  omp_set_nested(1);
   bool are_valid = TRUE;
 
 #pragma omp parallel for shared(are_valid)
@@ -58,8 +60,10 @@ bool validate_columns(Sudoku *sudoku) {
 }
 
 bool validate_rows(Sudoku *sudoku) {
+  omp_set_num_threads(9);
+  omp_set_nested(1);
   bool are_valid = TRUE;
-#pragma omp parallel for shared(are_valid)
+#pragma omp parallel for shared(are_valid) schedule(dynamic)
   for (size_t rowIdx = 0; rowIdx < sudoku->rowLength; rowIdx++) {
     if (!are_valid) {
       continue;
@@ -83,8 +87,10 @@ bool validate_rows(Sudoku *sudoku) {
 }
 
 bool validate_submatrices(const Sudoku *sudoku) {
+  omp_set_num_threads(3);
+  omp_set_nested(1);
   bool are_valid = TRUE;
-#pragma omp parallel for shared(are_valid)
+#pragma omp parallel for shared(are_valid) schedule(dynamic)
   for (size_t start_row_col = 0; start_row_col < sudoku->rowLength;
        start_row_col += 3) {
     if (!are_valid) {
@@ -145,6 +151,7 @@ void *thread_row_checker(void *arg) {
 }
 
 int main(int argc, char **argv) {
+  omp_set_num_threads(1);
   const size_t ROW_LENGTH = 9;
   if (argc != 2) {
     fprintf(stderr, "Invalid number of arguments received! Please provide a "
