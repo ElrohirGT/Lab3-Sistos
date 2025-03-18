@@ -32,6 +32,8 @@ size_t idx_fromCordsToIdx(size_t row_length, size_t rowIdx, size_t colIdx) {
 }
 
 bool validate_columns(Sudoku *sudoku) {
+  omp_set_num_threads(9);
+  omp_set_nested(1);
   bool are_valid = TRUE;
 
 #pragma omp parallel for shared(are_valid)
@@ -61,15 +63,18 @@ bool validate_columns(Sudoku *sudoku) {
 }
 
 bool validate_rows(Sudoku *sudoku) {
+  omp_set_num_threads(9);
+  omp_set_nested(1);
   bool are_valid = TRUE;
-#pragma omp parallel for shared(are_valid)
+
+#pragma omp parallel for shared(are_valid) schedule(dynamic)
   for (size_t rowIdx = 0; rowIdx < sudoku->rowLength; rowIdx++) {
     if (!are_valid) {
       continue;
     }
 
     uint16_t marker = 0;
-#pragma omp parallel for shared(marker)
+#pragma omp parallel for shared(marker) schedule(dynamic)
     for (size_t colIdx = 0; colIdx < sudoku->rowLength; colIdx++) {
       size_t idx = idx_fromCordsToIdx(sudoku->rowLength, rowIdx, colIdx);
       uint8_t cell_val = sudoku->data[idx];
@@ -89,8 +94,10 @@ bool validate_rows(Sudoku *sudoku) {
 }
 
 bool validate_submatrices(const Sudoku *sudoku) {
+  omp_set_num_threads(9);
+  omp_set_nested(1);
   bool are_valid = TRUE;
-#pragma omp parallel for shared(are_valid)
+#pragma omp parallel for shared(are_valid) schedule(dynamic)
   for (size_t start_row_col = 0; start_row_col < sudoku->rowLength;
        start_row_col += 3) {
     if (!are_valid) {
@@ -98,9 +105,9 @@ bool validate_submatrices(const Sudoku *sudoku) {
     }
     uint16_t marker = 0;
 
-#pragma omp parallel for shared(marker)
+#pragma omp parallel for shared(marker) schedule(dynamic)
     for (size_t rowIdx = start_row_col; rowIdx < start_row_col + 3; rowIdx++) {
-#pragma omp parallel for shared(marker)
+#pragma omp parallel for shared(marker) schedule(dynamic)
       for (size_t colIdx = start_row_col; colIdx < start_row_col + 3;
            colIdx++) {
 
@@ -155,6 +162,7 @@ void *thread_row_checker(void *arg) {
 }
 
 int main(int argc, char **argv) {
+  omp_set_num_threads(1);
   const size_t ROW_LENGTH = 9;
   if (argc != 2) {
     fprintf(stderr, "Invalid number of arguments received! Please provide a "
