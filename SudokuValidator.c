@@ -1,8 +1,12 @@
 #include <fcntl.h>
 #include <math.h>
+#include <pthread.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <sys/syscall.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 typedef struct {
@@ -43,7 +47,7 @@ bool validate_columns(Sudoku *sudoku) {
   return TRUE;
 }
 
-bool validate_row(Sudoku *sudoku, size_t rowIdx) {
+bool validate_rows(Sudoku *sudoku) {
   for (size_t rowIdx = 0; rowIdx < sudoku->rowLength; rowIdx++) {
     uint16_t marker = 0;
     for (size_t colIdx = 0; colIdx < sudoku->rowLength; colIdx++) {
@@ -82,6 +86,19 @@ bool validate_submatrices(const Sudoku *sudoku) {
   }
 
   return TRUE;
+}
+
+void thread_column_checker(void *arg) {
+  Sudoku *data = arg;
+  bool columns_are_valid = validate_columns(data);
+
+  pthread_exit(&columns_are_valid);
+}
+
+void thread_row_checker(void *arg) {
+  Sudoku *data = arg;
+  bool rows_are_valid = validate_rows(data);
+  pthread_exit(&rows_are_valid);
 }
 
 int main(int argc, char **argv) {
@@ -124,26 +141,102 @@ int main(int argc, char **argv) {
     sudoku_data[i] = (uint8_t)(file_byte - '0');
   }
 
-  const Sudoku sudoku = {
+  Sudoku sudoku = {
       .rowLength = ROW_LENGTH,
       .length = ROW_LENGTH * ROW_LENGTH,
       .data = sudoku_data,
   };
 
-  bool submatrices_are_valid = validate_submatrices(&sudoku);
+  bool valid_submatrices = validate_submatrices(&sudoku);
 
   pid_t process_id = getpid();
-  switch (fork()) {
-  case -1:
+  int son_pid = fork();
+  if (son_pid == -1) {
     fprintf(stderr, "An error has ocurred trying to fork!");
     return 1;
-  case 0:
-    int pid_str_size = ceil(log10(process_id) + 1) * sizeof(char);
+  } else if (son_pid == 0) {
+    // Son branch...
+    int pid_str_size = (int)(ceil(log10(process_id) + 1.0) * sizeof(char));
     char str_pid[pid_str_size];
-    execlp("ps", "-p", process_id, "-lLF");
-    break;
+    if (sprintf(str_pid, "%d", process_id) < 0) {
+      fprintf(stderr,
+              "Failed to write the `process_id` into the buffer! pid: %d",
+              process_id);
+      exit(1);
+    }
 
-  default: // On the father...
-    break;
+    if (-1 == execlp("ps", "-p", process_id, "-lLf")) {
+      fprintf(stderr, "Failed to execute `ps` command with execlp! pid: %d",
+              process_id);
+      exit(1);
+    }
+
+  } else {
+    // Father branch...
+    pthread_t thread_id;
+    if (0 != pthread_create(&thread_id, NULL, (void *)thread_column_checker,
+                            &sudoku)) {
+      fprintf(stderr, "Failed to create thread for validating columns!");
+      exit(1);
+    }
+
+    bool valid_cols;
+    if (0 != pthread_join(thread_id, (void *)&valid_cols)) {
+      fprintf(stderr, "Failed to join into the validating columns thread!");
+      exit(1);
+    }
+
+    int current_thread_id = syscall(SYS_gettid);
+    if (-1 == current_thread_id) {
+      fprintf(stderr, "Failed to obtain the current tid!");
+      exit(1);
+    }
+
+    wait(&son_pid);
+
+    if (0 !=
+        pthread_create(&thread_id, NULL, (void *)thread_row_checker, &sudoku)) {
+      fprintf(stderr, "Failed to create thread for validating rows!");
+      exit(1);
+    }
+
+    bool valid_rows;
+    if (0 != pthread_join(thread_id, (void *)&valid_rows)) {
+      fprintf(stderr, "Failed to join into the validating columns thread!");
+      exit(1);
+    }
+
+    bool is_valid = valid_rows && valid_cols && valid_submatrices;
+    if (is_valid) {
+      printf("The solution is valid!");
+    } else {
+      printf("The solution is not valid!");
+    }
+
+    son_pid = fork();
+    if (son_pid == -1) {
+      fprintf(stderr, "An error has ocurred trying to fork!");
+      return 1;
+    } else if (son_pid == 0) {
+      // Another son...
+      int pid_str_size = (int)(ceil(log10(process_id) + 1.0) * sizeof(char));
+      char str_pid[pid_str_size];
+      if (sprintf(str_pid, "%d", process_id) < 0) {
+        fprintf(stderr,
+                "Failed to write the `process_id` into the buffer! pid: %d",
+                process_id);
+        exit(1);
+      }
+
+      if (-1 == execlp("ps", "-p", process_id, "-lLf")) {
+        fprintf(stderr, "Failed to execute `ps` command with execlp! pid: %d",
+                process_id);
+        exit(1);
+      }
+    } else {
+      // Father again...
+      wait(&son_pid);
+      return 0;
+    }
   }
 }
